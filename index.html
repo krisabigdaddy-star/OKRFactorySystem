@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OKR Difficulty Manager - Google Auth</title>
+    
+    <!-- Library CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDK (Compat Version) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Sarabun', sans-serif; }
+        @media print {
+            @page { size: A4; margin: 15mm; }
+            body { background: white !important; -webkit-print-color-adjust: exact; margin: 0; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+        }
+        .print-only { display: none; }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            box-shadow: 0 0 2px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // Configuration
+        const firebaseConfig = window.__firebase_config ? JSON.parse(window.__firebase_config) : {
+            apiKey: "", // ใส่ API Key ของคุณที่นี่
+            authDomain: "default.firebaseapp.com",
+            projectId: "default",
+            storageBucket: "default.appspot.com",
+            messagingSenderId: "",
+            appId: ""
+        };
+        const appId = window.__app_id || 'default-app-id';
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+        // Icon Components
+        const Icon = ({ name, size = 16, className = "" }) => {
+            const icons = {
+                plus: <path d="M12 5v14M5 12h14" />,
+                trash: <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6" />,
+                printer: <path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" />,
+                target: <React.Fragment><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></React.Fragment>,
+                users: <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>,
+                lightbulb: <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/>,
+                alert: <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3ZM12 9v4M12 17h.01"/>,
+                award: <React.Fragment><circle cx="12" cy="8" r="7"/><path d="M8.21 13.89L7 23l5-3 5 3-1.21-911"/></React.Fragment>,
+                check: <polyline points="20 6 9 17 4 12" />,
+                logOut: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>,
+                google: <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.9 3.47-1.92 4.64-1.2 1.2-2.88 2.08-4.88 2.08-3.84 0-7.12-3.12-7.12-7.12s3.28-7.12 7.12-7.12c2.16 0 3.76.8 4.88 1.84l2.32-2.32C17.04 2.16 14.88 1.2 12.48 1.2 6.48 1.2 1.6 6.08 1.6 12.08s4.88 10.88 10.88 10.88c3.28 0 5.84-1.12 7.84-3.2 2-2 2.64-4.8 2.64-7.12 0-.48-.04-1.04-.12-1.52H12.48z"/>
+            };
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name]}
+                </svg>
+            );
+        };
+
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [localObjectives, setLocalObjectives] = useState([]);
+            const isUpdatingRef = useRef(false);
+
+            // Rule 3 - Authentication
+            useEffect(() => {
+                const initAuth = async () => {
+                    const token = window.__initial_auth_token;
+                    if (token) {
+                        await auth.signInWithCustomToken(token);
+                    }
+                    // We don't sign in anonymously automatically anymore 
+                    // to allow Google sign-in.
+                };
+                initAuth();
+                const unsubscribe = auth.onAuthStateChanged(u => {
+                    setUser(u);
+                    if (!u) setLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // Rule 1 & 2 - Data Sync
+            useEffect(() => {
+                if (!user) return;
+                setLoading(true);
+                const path = `artifacts/${appId}/users/${user.uid}/objectives`;
+                const unsubscribe = db.collection(path).onSnapshot(snap => {
+                    if (!isUpdatingRef.current) {
+                        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        setLocalObjectives(data);
+                        setLoading(false);
+                    }
+                }, err => {
+                    console.error("Snapshot Error:", err);
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, [user]);
+
+            const handleLogin = async () => {
+                try {
+                    await auth.signInWithPopup(googleProvider);
+                } catch (e) {
+                    console.error("Login Error:", e);
+                }
+            };
+
+            const handleLogout = () => auth.signOut();
+
+            const criteria = [
+                { id: 'targetGap', label: 'ระยะห่างจากเป้าเดิม', desc: 'วัดการปรับปรุงจากอดีต', icon: 'target', options: [{v:1,t:'< 5%'},{v:2,t:'10-20%'},{v:3,t:'> 20%'}] },
+                { id: 'coordination', label: 'การประสานงาน', desc: 'การทำงานร่วมกับหน่วยอื่น', icon: 'users', options: [{v:1,t:'คนเดียว'},{v:2,t:'ข้ามแผนก'},{v:3,t:'ข้ามสายงาน'}] },
+                { id: 'complexity', label: 'ความซับซ้อน', desc: 'ความใหม่ของวิธีการ/เทคโนโลยี', icon: 'lightbulb', options: [{v:1,t:'มี SOP'},{v:2,t:'วิธีใหม่'},{v:3,t:'นวัตกรรม'}] },
+                { id: 'risk', label: 'ความเสี่ยง', desc: 'ความไม่แน่นอนและผลกระทบ', icon: 'alert', options: [{v:1,t:'ต่ำ'},{v:2,t:'กลาง'},{v:3,t:'สูงมาก'}] }
+            ];
+
+            const getDiffInfo = (scores) => {
+                const avg = ((scores?.targetGap || 1) + (scores?.coordination || 1) + (scores?.complexity || 1) + (scores?.risk || 1)) / 4;
+                if (avg <= 1.5) return { level: 'L1', threshold: 100, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Incremental' };
+                if (avg <= 2.5) return { level: 'L2', threshold: 85, color: 'text-amber-600', bg: 'bg-amber-50', label: 'Strategic' };
+                return { level: 'L3', threshold: 70, color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Moonshot' };
+            };
+
+            const calculateScore = (obj) => {
+                if (!obj.keyResults?.length) return 0;
+                const avgKR = obj.keyResults.reduce((a, b) => a + (Number(b.value) || 0), 0) / obj.keyResults.length;
+                const info = getDiffInfo(obj.scores);
+                return Math.min((avgKR / info.threshold) * 100, 100).toFixed(1);
+            };
+
+            const performUpdate = async (id, data) => {
+                if (!user) return;
+                isUpdatingRef.current = true;
+                setLocalObjectives(prev => prev.map(o => o.id === id ? { ...o, ...data } : o));
+                try {
+                    await db.collection(`artifacts/${appId}/users/${user.uid}/objectives`).doc(id).update({ ...data, updatedAt: Date.now() });
+                } catch (e) { console.error("Update Error:", e); }
+                finally {
+                    setTimeout(() => { isUpdatingRef.current = false; }, 800);
+                }
+            };
+
+            const handleAdd = async () => {
+                if (!user) return;
+                try {
+                    await db.collection(`artifacts/${appId}/users/${user.uid}/objectives`).add({
+                        name: '',
+                        scores: { targetGap: 1, coordination: 1, complexity: 1, risk: 1 },
+                        keyResults: [{ id: Date.now(), name: '', metric: '', target: '', value: 0 }],
+                        isExpanded: true,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
+                } catch (e) { console.error("Add Error:", e); }
+            };
+
+            if (loading && user) return <div className="min-h-screen flex items-center justify-center bg-white font-bold text-slate-400">กำลังดึงข้อมูล OKR ของคุณ...</div>;
+
+            const sorted = [...localObjectives].sort((a,b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+            return (
+                <div className="min-h-screen pb-20">
+                    <header className="no-print bg-white border-b sticky top-0 z-30 px-4 py-4 flex justify-between items-center shadow-sm">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-indigo-600 p-2 rounded shadow-md"><Icon name="target" className="text-white" size={20}/></div>
+                            <h1 className="font-extrabold text-xl tracking-tight text-slate-800 hidden sm:block">OKR Difficulty Manager</h1>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {user ? (
+                                <React.Fragment>
+                                    <div className="hidden md:flex flex-col items-end mr-2">
+                                        <span className="text-xs font-bold text-slate-700">{user.displayName}</span>
+                                        <span className="text-[10px] text-slate-400">{user.email}</span>
+                                    </div>
+                                    <button onClick={handleAdd} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all active:scale-95">
+                                        <Icon name="plus" size={16}/> <span className="hidden sm:inline">เพิ่มเป้าหมาย</span>
+                                    </button>
+                                    <button onClick={() => window.print()} className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-200 transition-all">
+                                        <Icon name="printer" size={16}/> <span className="hidden sm:inline">Export PDF</span>
+                                    </button>
+                                    <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 p-2" title="Logout">
+                                        <Icon name="logOut" size={20}/>
+                                    </button>
+                                </React.Fragment>
+                            ) : (
+                                <button onClick={handleLogin} className="bg-white border-2 border-slate-200 text-slate-700 px-6 py-2 rounded-xl text-sm font-black flex items-center gap-3 hover:bg-slate-50 transition-all shadow-sm">
+                                    <Icon name="google" size={18} className="text-red-500"/> Login with Google Account
+                                </button>
+                            )}
+                        </div>
+                    </header>
+
+                    <main className="max-w-4xl mx-auto p-6">
+                        {!user ? (
+                            <div className="text-center py-32 space-y-6">
+                                <div className="bg-indigo-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                                    <Icon name="target" size={48} className="text-indigo-600"/>
+                                </div>
+                                <h2 className="text-3xl font-black text-slate-800">ยินดีต้อนรับสู่ระบบ OKR</h2>
+                                <p className="text-slate-500 max-w-sm mx-auto leading-relaxed">กรุณาเข้าสู่ระบบด้วยบัญชี Google เพื่อจัดการเป้าหมายและบันทึกข้อมูลของคุณไว้บนคลาวด์อย่างปลอดภัย</p>
+                                <button onClick={handleLogin} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95">
+                                    เข้าสู่ระบบเดี๋ยวนี้
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="no-print space-y-8">
+                                {sorted.length === 0 ? (
+                                    <div className="text-center py-20 border-2 border-dashed rounded-3xl bg-white">
+                                        <p className="text-slate-400 mb-4 italic font-bold uppercase tracking-widest text-xs">ยังไม่มีข้อมูล OKR ของคุณ</p>
+                                        <button onClick={handleAdd} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black shadow-lg shadow-indigo-50 hover:bg-indigo-700">เริ่มสร้าง Objective แรก</button>
+                                    </div>
+                                ) : sorted.map((obj, i) => {
+                                    const info = getDiffInfo(obj.scores);
+                                    return (
+                                        <div key={obj.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6 transition-all hover:border-indigo-100">
+                                            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                                                <div className="flex items-center gap-3 flex-grow">
+                                                    <span className="font-black text-indigo-600 bg-indigo-50 w-8 h-8 rounded-lg flex items-center justify-center">{i+1}.</span>
+                                                    <input className="w-full font-bold text-lg border-none focus:ring-0 text-slate-700 placeholder:text-slate-300" value={obj.name} onChange={e => performUpdate(obj.id, {name: e.target.value})} placeholder="ระบุชื่อ Objective..."/>
+                                                </div>
+                                                <button onClick={() => db.collection(`artifacts/${appId}/users/${user.uid}/objectives`).doc(obj.id).delete()} className="text-slate-300 hover:text-red-500 transition-colors"><Icon name="trash" size={18}/></button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl shadow-inner">
+                                                {criteria.map(c => (
+                                                    <div key={c.id} className="text-center space-y-2">
+                                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{c.label}</label>
+                                                        <div className="flex justify-center gap-1.5">
+                                                            {c.options.map(o => (
+                                                                <button key={o.v} onClick={() => performUpdate(obj.id, { scores: {...obj.scores, [c.id]: o.v} })} className={`w-8 h-8 rounded-lg text-xs font-black transition-all shadow-sm ${obj.scores?.[c.id] === o.v ? 'bg-indigo-600 text-white scale-110' : 'bg-white border border-slate-200 text-slate-400 hover:border-indigo-300'}`}>{o.v}</button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Icon name="check" size={14} className="text-emerald-500"/> Key Results</h3>
+                                                    <button 
+                                                        onClick={() => {
+                                                            const currentKRs = obj.keyResults || [];
+                                                            const newKRs = [...currentKRs, { id: Date.now(), name: '', metric: '', target: '', value: 0 }];
+                                                            performUpdate(obj.id, { keyResults: newKRs });
+                                                        }}
+                                                        className="text-[10px] font-bold text-indigo-600 bg-white border border-indigo-100 px-3 py-1 rounded-full hover:bg-indigo-50 transition-colors shadow-sm"
+                                                    >+ เพิ่มรายการ KR</button>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-1 gap-4">
+                                                    {(obj.keyResults || []).map(kr => (
+                                                        <div key={kr.id} className="bg-white border border-slate-100 rounded-xl p-5 space-y-4 shadow-sm hover:shadow-md transition-shadow">
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[9px] font-bold text-slate-400 uppercase italic">หัวข้อ KR</label>
+                                                                    <input className="w-full text-sm border-slate-200 rounded-lg p-2 focus:border-indigo-300 focus:ring-0" value={kr.name} onChange={e => {
+                                                                        const updatedKRs = obj.keyResults.map(k => k.id === kr.id ? {...k, name: e.target.value} : k);
+                                                                        performUpdate(obj.id, { keyResults: updatedKRs });
+                                                                    }} placeholder="สิ่งที่ต้องทำ..."/>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[9px] font-bold text-slate-400 uppercase italic">ตัวชี้วัด</label>
+                                                                    <input className="w-full text-sm border-slate-200 rounded-lg p-2 focus:border-indigo-300 focus:ring-0" value={kr.metric} onChange={e => {
+                                                                        const updatedKRs = obj.keyResults.map(k => k.id === kr.id ? {...k, metric: e.target.value} : k);
+                                                                        performUpdate(obj.id, { keyResults: updatedKRs });
+                                                                    }} placeholder="หน่วยวัด..."/>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[9px] font-bold text-slate-400 uppercase italic">เป้าหมาย</label>
+                                                                    <div className="flex gap-2">
+                                                                        <input className="w-full text-sm border-slate-200 rounded-lg p-2 focus:border-indigo-300 focus:ring-0" value={kr.target} onChange={e => {
+                                                                            const updatedKRs = obj.keyResults.map(k => k.id === kr.id ? {...k, target: e.target.value} : k);
+                                                                            performUpdate(obj.id, { keyResults: updatedKRs });
+                                                                        }} placeholder="ตัวเลขเป้าหมาย..."/>
+                                                                        <button onClick={() => {
+                                                                            const filteredKRs = obj.keyResults.filter(k => k.id !== kr.id);
+                                                                            performUpdate(obj.id, { keyResults: filteredKRs });
+                                                                        }} className="text-slate-200 hover:text-red-400 p-1"><Icon name="trash" size={16}/></button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-dashed border-slate-200">
+                                                                <input type="range" className="flex-grow accent-indigo-600" value={kr.value} onChange={e => {
+                                                                    const updatedKRs = obj.keyResults.map(k => k.id === kr.id ? {...k, value: parseInt(e.target.value) || 0} : k);
+                                                                    performUpdate(obj.id, { keyResults: updatedKRs });
+                                                                }}/>
+                                                                <div className="flex flex-col items-end min-w-[50px]">
+                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Actual</span>
+                                                                    <span className="font-black text-indigo-600 text-base">{kr.value}%</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="pt-4 border-t border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                                <div className="flex gap-2">
+                                                    <span className={`text-[10px] font-black px-3 py-1 rounded-full border shadow-sm ${info.bg} ${info.color}`}>DIFFICULTY: {info.level}</span>
+                                                    <span className="text-[10px] font-black px-3 py-1 rounded-full border bg-white text-slate-500 shadow-sm">THRESHOLD: {info.threshold}%</span>
+                                                </div>
+                                                <div className="bg-slate-900 text-white px-6 py-2.5 rounded-xl flex items-center gap-4 shadow-xl border border-slate-700">
+                                                    <div className="text-right">
+                                                        <div className="text-[8px] font-black text-indigo-300 uppercase tracking-widest">Final Result</div>
+                                                        <div className="text-2xl font-black">{calculateScore(obj)}%</div>
+                                                    </div>
+                                                    <Icon name="award" className="text-indigo-400" size={24}/>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Print Only Area */}
+                        {user && (
+                            <div className="print-only space-y-10">
+                                <div className="header border-b-4 border-slate-900 pb-4 flex justify-between items-end">
+                                    <div>
+                                        <h1 className="text-4xl font-black uppercase tracking-tighter">Performance PDF Report</h1>
+                                        <p className="text-slate-500 font-bold">สรุปผล OKR ประจำปี - รายบุคคล</p>
+                                    </div>
+                                    <div className="text-right text-[10px] font-bold text-slate-400 leading-relaxed">
+                                        <p>Employee: {user.displayName} ({user.email})</p>
+                                        <p>Date: {new Date().toLocaleDateString('th-TH')}</p>
+                                    </div>
+                                </div>
+                                {sorted.map((obj, i) => {
+                                    const info = getDiffInfo(obj.scores);
+                                    return (
+                                        <div key={obj.id} className="space-y-4" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="bg-slate-200 p-4 font-black text-lg border-x border-t border-slate-900 flex justify-between items-center">
+                                                <span>{i+1}. {obj.name || "Untitled Objective"}</span>
+                                                <span className="text-sm">Difficulty: {info.level} ({info.threshold}% Threshold)</span>
+                                            </div>
+                                            <table className="w-full border-collapse">
+                                                <thead>
+                                                    <tr>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-left">Key Result</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-left">Metric</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-left">Target</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-center">Result</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-center">Score</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {obj.keyResults?.map((kr, idx) => (
+                                                        <tr key={kr.id}>
+                                                            <td className="border-2 border-slate-900 p-3 text-sm font-bold">{kr.name}</td>
+                                                            <td className="border-2 border-slate-900 p-3 text-sm">{kr.metric}</td>
+                                                            <td className="border-2 border-slate-900 p-3 text-sm">{kr.target}</td>
+                                                            <td className="border-2 border-slate-900 p-3 text-sm text-center font-black text-indigo-600">{kr.value}%</td>
+                                                            {idx === 0 && <td rowSpan={obj.keyResults.length} className="border-2 border-slate-900 p-3 text-center font-black text-2xl bg-slate-50">{calculateScore(obj)}%</td>}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    );
+                                })}
+                                <div className="mt-20 grid grid-cols-2 gap-24 px-10">
+                                    <div className="text-center">
+                                        <div className="h-20 border-b-2 border-slate-900"></div>
+                                        <p className="mt-4 font-black uppercase text-[10px]">พนักงาน (Employee Signature)</p>
+                                        <p className="text-[8px] text-slate-400 mt-1 italic">Signature: {user.displayName}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="h-20 border-b-2 border-slate-900"></div>
+                                        <p className="mt-4 font-black uppercase text-[10px]">ผู้ประเมิน (Manager Signature)</p>
+                                        <p className="text-[8px] text-slate-400 mt-1 italic">Date: ____/____/____</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
