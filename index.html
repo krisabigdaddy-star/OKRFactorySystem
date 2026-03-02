@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OKRs Manager - Factory Strategic System</title>
     
-    <!-- Library CDN -->
+    <!-- นำเข้า Library ที่จำเป็น -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase SDK (Compat Version for ease of use in HTML) -->
+    <!-- นำเข้า Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -21,7 +21,7 @@
     <style>
         body { font-family: 'Sarabun', sans-serif; }
         
-        /* Layout for Printing A4 */
+        /* Layout สำหรับการ Print / Export PDF */
         @media print {
             @page { size: A4; margin: 15mm; }
             body { background: white !important; -webkit-print-color-adjust: exact; margin: 0; }
@@ -31,13 +31,11 @@
         }
         .print-only { display: none; }
         
-        /* Scrollbar styling */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #818cf8; }
 
-        /* Custom Slider Styling */
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             height: 20px;
@@ -59,10 +57,9 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // --- Firebase Configuration ---
-        // นำข้อมูลจาก Firebase Console มาวางแทนที่ช่องว่างเหล่านี้
+        // --- 👇 นำข้อมูลจาก Firebase ของคุณมาใส่ตรงนี้ 👇 ---
         const firebaseConfig = {
             apiKey: "AIzaSyALv2L0yKfnTRceAC6PUwP3bh-1mMO9rPI",
   authDomain: "okr-factory-system.firebaseapp.com",
@@ -72,9 +69,10 @@
   appId: "1:25163889718:web:51312d9b937c16bb75ac97",
   measurementId: "G-M913PJ0VLW"
         };
+        // --- 👆 สิ้นสุดการใส่ข้อมูล Firebase 👆 ---
+
         const appId = 'okr-management-v1';
 
-        // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
@@ -82,7 +80,6 @@
         const db = firebase.firestore();
         const googleProvider = new firebase.auth.GoogleAuthProvider();
 
-        // Icon Components (Inline SVG)
         const Icon = ({ name, size = 16, className = "" }) => {
             const icons = {
                 plus: <path d="M12 5v14M5 12h14" />,
@@ -112,21 +109,32 @@
             const [localObjectives, setLocalObjectives] = useState([]);
             const isUpdatingRef = useRef(false);
 
-            // Handle Login
+            // ใช้ signInWithRedirect เพื่อแก้ปัญหา Popup ในมือถือ
             const handleLogin = async () => {
                 try {
-                    await auth.signInWithPopup(googleProvider);
+                    setLoading(true);
+                    await auth.signInWithRedirect(googleProvider);
                 } catch (e) {
                     console.error("Login Error:", e);
-                    alert("ไม่สามารถเข้าสู่ระบบได้: " + e.message);
+                    alert("เข้าสู่ระบบไม่สำเร็จ: " + e.message);
+                    setLoading(false);
                 }
             };
 
-            // Handle Logout
-            const handleLogout = () => auth.signOut();
+            const handleLogout = () => {
+                auth.signOut();
+                setLocalObjectives([]);
+            };
 
-            // Authentication Listener
             useEffect(() => {
+                // จัดการผลลัพธ์หลังจาก Redirect กลับมา
+                auth.getRedirectResult().catch((error) => {
+                    console.error("Redirect Auth Error:", error);
+                    if(error.code === 'auth/unauthorized-domain') {
+                        alert("การตั้งค่าโดเมนยังไม่สมบูรณ์ กรุณาเพิ่ม " + window.location.hostname + " ในหน้า Firebase Console");
+                    }
+                });
+
                 const unsubscribe = auth.onAuthStateChanged(u => {
                     setUser(u);
                     if (!u) setLoading(false);
@@ -134,7 +142,6 @@
                 return () => unsubscribe();
             }, []);
 
-            // Data Synchronization
             useEffect(() => {
                 if (!user) return;
                 setLoading(true);
@@ -210,16 +217,14 @@
 
             const handleExportPDF = () => {
                 window.focus();
-                setTimeout(() => {
-                    window.print();
-                }, 200);
+                setTimeout(() => { window.print(); }, 200);
             };
 
-            if (loading && user) return (
-                <div className="min-h-screen flex items-center justify-center bg-white font-bold text-slate-400 italic">
+            if (loading) return (
+                <div className="min-h-screen flex items-center justify-center bg-slate-50 font-bold text-slate-500 font-sarabun">
                     <div className="text-center space-y-4">
-                        <Loader2 size={40} className="animate-spin text-indigo-600 mx-auto" />
-                        <p>กำลังเชื่อมต่อคลาวด์...</p>
+                        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                        <p>กำลังเชื่อมต่อระบบรักษาความปลอดภัย...</p>
                     </div>
                 </div>
             );
@@ -228,7 +233,7 @@
 
             return (
                 <div className="min-h-screen pb-20 font-sarabun">
-                    {/* Header Component */}
+                    {/* Header */}
                     <header className="no-print bg-white border-b sticky top-0 z-30 px-4 py-3 flex justify-between items-center shadow-sm">
                         <div className="flex items-center gap-2">
                             <div className="bg-indigo-600 p-2 rounded shadow-md"><Icon name="target" className="text-white" size={20}/></div>
@@ -240,75 +245,68 @@
                                     <div className="hidden lg:flex flex-col items-end mr-2">
                                         <span className="text-xs font-bold text-slate-700">{user.displayName}</span>
                                         <div className="flex items-center gap-1 text-emerald-500 text-[10px] font-bold">
-                                            {saving ? "กำลังบันทึก..." : "เชื่อมต่อ Cloud สำเร็จ"}
+                                            {saving ? "กำลังบันทึก..." : "อัปเดตล่าสุด"}
                                         </div>
                                     </div>
                                     <button onClick={handleAdd} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all active:scale-95 shadow-sm">
                                         <Icon name="plus" size={16}/> <span className="hidden sm:inline">เพิ่มเป้าหมาย</span>
                                     </button>
                                     <button onClick={handleExportPDF} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-black transition-all">
-                                        <Icon name="printer" size={16}/> <span className="hidden sm:inline">Export PDF</span>
+                                        <Icon name="printer" size={16}/> <span className="hidden sm:inline">พิมพ์ PDF</span>
                                     </button>
-                                    <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 p-2 ml-1" title="Logout">
+                                    <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 p-2 ml-1" title="ออกจากระบบ">
                                         <Icon name="logOut" size={20}/>
                                     </button>
                                 </React.Fragment>
-                            ) : (
-                                <button onClick={handleLogin} className="bg-white border-2 border-slate-200 text-slate-700 px-6 py-2 rounded-xl text-sm font-black flex items-center gap-3 hover:bg-slate-50 transition-all shadow-sm">
-                                    <Icon name="google" size={18} className="text-red-500"/> Login with Google
-                                </button>
-                            )}
+                            ) : null}
                         </div>
                     </header>
 
                     <main className="max-w-6xl mx-auto p-4 md:p-6">
                         {!user ? (
-                            <div className="text-center py-32 space-y-8 animate-in fade-in zoom-in-95">
+                            <div className="text-center py-32 space-y-8">
                                 <div className="bg-indigo-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
                                     <Icon name="target" size={48} className="text-indigo-600"/>
                                 </div>
                                 <div className="space-y-2">
                                     <h2 className="text-4xl font-black text-slate-800 tracking-tight">Personal OKRs Cloud</h2>
-                                    <p className="text-slate-500 max-w-md mx-auto leading-relaxed">ระบบบันทึกผลงานและการประเมินความยากรายบุคคล ข้อมูลของคุณจะถูกเก็บรักษาไว้บนบัญชี google เพื่อให้กลับมาแก้ไขได้ทุกที่</p>
+                                    <p className="text-slate-500 max-w-md mx-auto leading-relaxed">เข้าสู่ระบบด้วยบัญชี Google เพื่อเริ่มต้นบันทึกเป้าหมายและการประเมินความยากรายบุคคลของคุณ</p>
                                 </div>
-                                <button onClick={handleLogin} className="bg-indigo-600 text-white px-12 py-4 rounded-2xl font-black text-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95">
-                                    เข้าสู่ระบบเดี๋ยวนี้
+                                <button onClick={handleLogin} className="bg-indigo-600 text-white px-12 py-4 rounded-2xl font-black text-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-3 mx-auto">
+                                    <Icon name="google" size={24} />
+                                    เข้าสู่ระบบด้วย Google
                                 </button>
+                                <p className="text-xs text-slate-400 mt-4">แนะนำให้เปิดผ่านเบราว์เซอร์ Chrome หรือ Safari</p>
                             </div>
                         ) : (
-                            <div className="no-print space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="no-print space-y-8">
                                 {sorted.length === 0 ? (
                                     <div className="text-center py-24 border-2 border-dashed border-slate-200 rounded-3xl bg-white shadow-inner">
                                         <Icon name="plus" size={48} className="text-slate-200 mx-auto mb-4" />
-                                        <p className="text-slate-400 mb-6 italic font-bold uppercase tracking-widest text-xs">ยังไม่มีข้อมูลเป้าหมายของคุณในไตรมาสนี้</p>
+                                        <p className="text-slate-400 mb-6 italic font-bold uppercase tracking-widest text-xs">ยังไม่มีข้อมูลเป้าหมายของคุณ</p>
                                         <button onClick={handleAdd} className="bg-indigo-600 text-white px-10 py-3 rounded-2xl font-black shadow-lg shadow-indigo-50 hover:bg-indigo-700 transition-all">สร้าง Objective ใหม่</button>
                                     </div>
                                 ) : sorted.map((obj, i) => {
                                     const info = getDiffInfo(obj.scores);
                                     return (
                                         <div key={obj.id} className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 md:p-8 space-y-8 transition-all hover:border-indigo-100 hover:shadow-xl hover:shadow-indigo-50/50">
-                                            {/* Objective Header */}
                                             <div className="flex flex-col md:flex-row justify-between items-start gap-4 border-b border-slate-100 pb-6">
                                                 <div className="flex items-start gap-4 flex-grow w-full">
                                                     <span className="font-black text-white bg-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-indigo-100">{i+1}</span>
                                                     <textarea 
                                                         className="w-full font-extrabold text-2xl border-none focus:ring-0 text-slate-800 placeholder:text-slate-200 resize-none p-0 bg-transparent min-h-[40px] leading-tight"
-                                                        rows={1}
-                                                        value={obj.name}
-                                                        onFocus={handleAutoResize}
-                                                        onInput={handleAutoResize}
+                                                        rows={1} value={obj.name} onFocus={handleAutoResize} onInput={handleAutoResize}
                                                         onChange={e => performUpdate(obj.id, {name: e.target.value})} 
-                                                        placeholder="ระบุชื่อ Objective เช่น เพิ่มประสิทธิภาพการผลิตไลน์ A..."
+                                                        placeholder="ระบุชื่อ Objective เช่น เพิ่มประสิทธิภาพการผลิต..."
                                                     />
                                                 </div>
                                                 <div className="flex items-center gap-2 self-end md:self-start">
-                                                    <button onClick={() => db.collection(`artifacts/${appId}/users/${user.uid}/objectives`).doc(obj.id).delete()} className="text-slate-200 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-xl" title="ลบเป้าหมาย">
+                                                    <button onClick={() => db.collection(`artifacts/${appId}/users/${user.uid}/objectives`).doc(obj.id).delete()} className="text-slate-200 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-xl">
                                                         <Icon name="trash" size={20}/>
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            {/* Difficulty Matrix Section */}
                                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-inner">
                                                 {criteria.map(c => (
                                                     <div key={c.id} className="text-center space-y-3 flex flex-col items-center">
@@ -320,31 +318,24 @@
                                                         </div>
                                                         <div className="flex justify-center gap-2 mt-1">
                                                             {c.options.map(o => (
-                                                                <button 
-                                                                    key={o.v} 
-                                                                    onClick={() => performUpdate(obj.id, { scores: {...obj.scores, [c.id]: o.v} })} 
-                                                                    className={`w-10 h-10 rounded-2xl text-sm font-black transition-all shadow-sm flex items-center justify-center border-2 ${obj.scores?.[c.id] === o.v ? 'bg-indigo-600 border-indigo-600 text-white scale-110 shadow-indigo-100' : 'bg-white border-slate-100 text-slate-300 hover:border-indigo-200 hover:text-indigo-400'}`}
-                                                                >{o.v}</button>
+                                                                <button key={o.v} onClick={() => performUpdate(obj.id, { scores: {...obj.scores, [c.id]: o.v} })} className={`w-10 h-10 rounded-2xl text-sm font-black transition-all shadow-sm flex items-center justify-center border-2 ${obj.scores?.[c.id] === o.v ? 'bg-indigo-600 border-indigo-600 text-white scale-110 shadow-indigo-100' : 'bg-white border-slate-100 text-slate-300 hover:border-indigo-200 hover:text-indigo-400'}`}>
+                                                                    {o.v}
+                                                                </button>
                                                             ))}
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
 
-                                            {/* Key Results Section */}
                                             <div className="space-y-6">
                                                 <div className="flex justify-between items-center px-2">
                                                     <h3 className="text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-3">
-                                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-                                                        Key Results & Metrics
+                                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> Key Results & Metrics
                                                     </h3>
-                                                    <button 
-                                                        onClick={() => {
-                                                            const newKRs = [...(obj.keyResults || []), { id: Date.now(), name: '', metric: '', target: '', value: 0 }];
-                                                            performUpdate(obj.id, { keyResults: newKRs });
-                                                        }}
-                                                        className="text-[11px] font-black text-indigo-600 bg-white border border-indigo-100 px-4 py-2 rounded-full hover:bg-indigo-50 transition-all shadow-sm"
-                                                    >+ เพิ่มรายการผลลัพธ์</button>
+                                                    <button onClick={() => {
+                                                        const newKRs = [...(obj.keyResults || []), { id: Date.now(), name: '', metric: '', target: '', value: 0 }];
+                                                        performUpdate(obj.id, { keyResults: newKRs });
+                                                    }} className="text-[11px] font-black text-indigo-600 bg-white border border-indigo-100 px-4 py-2 rounded-full hover:bg-indigo-50 transition-all shadow-sm">+ เพิ่มรายการผลลัพธ์</button>
                                                 </div>
                                                 
                                                 <div className="grid grid-cols-1 gap-5">
@@ -357,12 +348,12 @@
                                                                 </div>
                                                                 <div className="md:col-span-3 space-y-2">
                                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ตัวชี้วัด (Metric)</label>
-                                                                    <textarea className="w-full text-sm font-bold border-slate-100 rounded-2xl py-3 px-4 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm bg-slate-50/50 resize-none min-h-[50px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.metric} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, metric: e.target.value} : k) })} placeholder="เช่น % Yield, ชั่วโมง..."/>
+                                                                    <textarea className="w-full text-sm font-bold border-slate-100 rounded-2xl py-3 px-4 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm bg-slate-50/50 resize-none min-h-[50px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.metric} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, metric: e.target.value} : k) })} placeholder="เช่น % Yield..."/>
                                                                 </div>
                                                                 <div className="md:col-span-4 space-y-2">
                                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">เป้าหมาย (Target)</label>
                                                                     <div className="flex gap-3">
-                                                                        <textarea className="flex-grow text-sm font-bold border-slate-100 rounded-2xl py-3 px-4 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm bg-slate-50/50 resize-none min-h-[50px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.target} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, target: e.target.value} : k) })} placeholder="เช่น 95%, 0 ครั้ง..."/>
+                                                                        <textarea className="flex-grow text-sm font-bold border-slate-100 rounded-2xl py-3 px-4 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm bg-slate-50/50 resize-none min-h-[50px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.target} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, target: e.target.value} : k) })} placeholder="เช่น 95%..."/>
                                                                         <button onClick={() => performUpdate(obj.id, { keyResults: obj.keyResults.filter(k => k.id !== kr.id) })} className="text-slate-200 hover:text-red-400 p-2 self-start"><Icon name="trash" size={18}/></button>
                                                                     </div>
                                                                 </div>
@@ -381,13 +372,12 @@
                                                 </div>
                                             </div>
 
-                                            {/* Summary Footer */}
                                             <div className="pt-8 border-t border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-6">
                                                 <div className="flex flex-wrap gap-3">
                                                     <span className={`text-[11px] font-black px-4 py-2 rounded-full border shadow-sm ${info.bg} ${info.color} uppercase tracking-wider`}>Difficulty: {info.level}</span>
-                                                    <span className="text-[11px] font-black px-4 py-2 rounded-full border bg-white text-slate-400 shadow-sm uppercase tracking-wider italic">Threshold สำหรับคะแนนเต็ม: {info.threshold}%</span>
+                                                    <span className="text-[11px] font-black px-4 py-2 rounded-full border bg-white text-slate-400 shadow-sm uppercase tracking-wider italic">Threshold: {info.threshold}%</span>
                                                 </div>
-                                                <div className="bg-slate-900 text-white pl-8 pr-4 py-3 rounded-2xl flex items-center gap-6 shadow-2xl border border-slate-700 transform hover:scale-105 transition-all">
+                                                <div className="bg-slate-900 text-white pl-8 pr-4 py-3 rounded-2xl flex items-center gap-6 shadow-2xl border border-slate-700">
                                                     <div className="text-right">
                                                         <div className="text-[9px] font-black text-indigo-400 uppercase tracking-[.2em] mb-1">Normalized Score</div>
                                                         <div className="text-4xl font-black leading-none">{calculateScore(obj)}<span className="text-base font-bold opacity-40 ml-1">%</span></div>
@@ -403,7 +393,7 @@
                             </div>
                         )}
 
-                        {/* Print Layout (PDF Rendering) */}
+                        {/* Print Only Area */}
                         {user && sorted.length > 0 && (
                             <div className="print-only space-y-12">
                                 <div className="header border-b-4 border-slate-900 pb-6 flex justify-between items-end">
@@ -414,7 +404,7 @@
                                     <div className="text-right text-[11px] font-black text-slate-400 uppercase leading-relaxed tracking-widest">
                                         <p>Employee: {user.displayName}</p>
                                         <p>Email: {user.email}</p>
-                                        <p>Report Date: {new Date().toLocaleDateString('th-TH')}</p>
+                                        <p>Date: {new Date().toLocaleDateString('th-TH')}</p>
                                     </div>
                                 </div>
                                 
