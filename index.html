@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>OKRs Manager - Factory Strategic System</title>
     
     <!-- นำเข้า Library ที่จำเป็น -->
@@ -19,7 +19,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700;800&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: 'Sarabun', sans-serif; }
+        body { font-family: 'Sarabun', sans-serif; -webkit-tap-highlight-color: transparent; }
         
         /* Layout สำหรับการ Print / Export PDF */
         @media print {
@@ -93,7 +93,8 @@
                 check: <polyline points="20 6 9 17 4 12" />,
                 logOut: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>,
                 google: <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.9 3.47-1.92 4.64-1.2 1.2-2.88 2.08-4.88 2.08-3.84 0-7.12-3.12-7.12-7.12s3.28-7.12 7.12-7.12c2.16 0 3.76.8 4.88 1.84l2.32-2.32C17.04 2.16 14.88 1.2 12.48 1.2 6.48 1.2 1.6 6.08 1.6 12.08s4.88 10.88 10.88 10.88c3.28 0 5.84-1.12 7.84-3.2 2-2 2.64-4.8 2.64-7.12 0-.48-.04-1.04-.12-1.52H12.48z"/>,
-                cloud: <path d="M17.5 19c3 0 5.5-2.5 5.5-5.5a5.4 5.4 0 0 0-4.6-5.4 7.5 7.5 0 0 0-14.7 1.8A5 5 0 0 0 5 20h12.5" />
+                cloud: <path d="M17.5 19c3 0 5.5-2.5 5.5-5.5a5.4 5.4 0 0 0-4.6-5.4 7.5 7.5 0 0 0-14.7 1.8A5 5 0 0 0 5 20h12.5" />,
+                info: <React.Fragment><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></React.Fragment>
             };
             return (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -107,17 +108,29 @@
             const [loading, setLoading] = useState(true);
             const [saving, setSaving] = useState(false);
             const [localObjectives, setLocalObjectives] = useState([]);
+            const [loginError, setLoginError] = useState("");
             const isUpdatingRef = useRef(false);
 
-            // ใช้ signInWithRedirect เพื่อแก้ปัญหา Popup ในมือถือ
+            // ใช้ signInWithPopup เพื่อความชัวร์ที่สุด ไม่ต้องกลัวเรื่อง Loop
             const handleLogin = async () => {
+                setLoginError("");
                 try {
                     setLoading(true);
-                    await auth.signInWithRedirect(googleProvider);
+                    await auth.signInWithPopup(googleProvider);
                 } catch (e) {
                     console.error("Login Error:", e);
-                    alert("เข้าสู่ระบบไม่สำเร็จ: " + e.message);
                     setLoading(false);
+                    
+                    // ดักจับ Error ตอนที่มือถือบล็อก Popup
+                    if (e.code === 'auth/popup-blocked') {
+                        setLoginError("ระบบถูกบล็อกหน้าต่าง (Popup Blocked) กรุณากดอนุญาตที่แถบด้านบนของเบราว์เซอร์ หากคุณใช้แอป LINE ให้กดจุด 3 จุดมุมขวาบนแล้วเลือก 'เปิดในเบราว์เซอร์' (Open in Browser) ครับ");
+                    } else if (e.code === 'auth/unauthorized-domain') {
+                        setLoginError("ยังไม่ได้ตั้งค่าอนุญาตโดเมน (Authorized Domain) ใน Firebase Console ครับ");
+                    } else if (e.code === 'auth/popup-closed-by-user') {
+                        // ปิดไปเอง ไม่ต้องโชว์ Error
+                    } else {
+                        setLoginError("ไม่สามารถเข้าสู่ระบบได้: " + e.message);
+                    }
                 }
             };
 
@@ -127,17 +140,10 @@
             };
 
             useEffect(() => {
-                // จัดการผลลัพธ์หลังจาก Redirect กลับมา
-                auth.getRedirectResult().catch((error) => {
-                    console.error("Redirect Auth Error:", error);
-                    if(error.code === 'auth/unauthorized-domain') {
-                        alert("การตั้งค่าโดเมนยังไม่สมบูรณ์ กรุณาเพิ่ม " + window.location.hostname + " ในหน้า Firebase Console");
-                    }
-                });
-
                 const unsubscribe = auth.onAuthStateChanged(u => {
                     setUser(u);
-                    if (!u) setLoading(false);
+                    setLoading(false);
+                    if(u) setLoginError("");
                 });
                 return () => unsubscribe();
             }, []);
@@ -220,11 +226,11 @@
                 setTimeout(() => { window.print(); }, 200);
             };
 
-            if (loading) return (
-                <div className="min-h-screen flex items-center justify-center bg-slate-50 font-bold text-slate-500 font-sarabun">
+            if (loading && user) return (
+                <div className="min-h-screen flex items-center justify-center bg-white font-bold text-slate-400 italic">
                     <div className="text-center space-y-4">
                         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                        <p>กำลังเชื่อมต่อระบบรักษาความปลอดภัย...</p>
+                        <p>กำลังดึงข้อมูล OKR ของคุณ...</p>
                     </div>
                 </div>
             );
@@ -237,7 +243,7 @@
                     <header className="no-print bg-white border-b sticky top-0 z-30 px-4 py-3 flex justify-between items-center shadow-sm">
                         <div className="flex items-center gap-2">
                             <div className="bg-indigo-600 p-2 rounded shadow-md"><Icon name="target" className="text-white" size={20}/></div>
-                            <h1 className="font-extrabold text-lg tracking-tight text-slate-800">OKRs Manager</h1>
+                            <h1 className="font-extrabold text-lg tracking-tight text-slate-800 hidden sm:block">OKRs Manager</h1>
                         </div>
                         <div className="flex items-center gap-3">
                             {user ? (
@@ -245,13 +251,13 @@
                                     <div className="hidden lg:flex flex-col items-end mr-2">
                                         <span className="text-xs font-bold text-slate-700">{user.displayName}</span>
                                         <div className="flex items-center gap-1 text-emerald-500 text-[10px] font-bold">
-                                            {saving ? "กำลังบันทึก..." : "อัปเดตล่าสุด"}
+                                            {saving ? "กำลังบันทึก..." : "เชื่อมต่อแล้ว"}
                                         </div>
                                     </div>
-                                    <button onClick={handleAdd} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all active:scale-95 shadow-sm">
+                                    <button onClick={handleAdd} className="bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 hover:bg-indigo-700 transition-all active:scale-95 shadow-sm">
                                         <Icon name="plus" size={16}/> <span className="hidden sm:inline">เพิ่มเป้าหมาย</span>
                                     </button>
-                                    <button onClick={handleExportPDF} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-black transition-all">
+                                    <button onClick={handleExportPDF} className="bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 hover:bg-black transition-all">
                                         <Icon name="printer" size={16}/> <span className="hidden sm:inline">พิมพ์ PDF</span>
                                     </button>
                                     <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 p-2 ml-1" title="ออกจากระบบ">
@@ -264,19 +270,27 @@
 
                     <main className="max-w-6xl mx-auto p-4 md:p-6">
                         {!user ? (
-                            <div className="text-center py-32 space-y-8">
+                            <div className="text-center py-20 space-y-8 max-w-lg mx-auto bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
                                 <div className="bg-indigo-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
                                     <Icon name="target" size={48} className="text-indigo-600"/>
                                 </div>
                                 <div className="space-y-2">
-                                    <h2 className="text-4xl font-black text-slate-800 tracking-tight">Personal OKRs Cloud</h2>
-                                    <p className="text-slate-500 max-w-md mx-auto leading-relaxed">เข้าสู่ระบบด้วยบัญชี Google เพื่อเริ่มต้นบันทึกเป้าหมายและการประเมินความยากรายบุคคลของคุณ</p>
+                                    <h2 className="text-3xl font-black text-slate-800 tracking-tight">Personal OKRs Cloud</h2>
+                                    <p className="text-slate-500 leading-relaxed text-sm">เข้าสู่ระบบด้วยบัญชี Google เพื่อเริ่มต้นบันทึกเป้าหมายและการประเมินความยากรายบุคคลของคุณ</p>
                                 </div>
-                                <button onClick={handleLogin} className="bg-indigo-600 text-white px-12 py-4 rounded-2xl font-black text-xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-3 mx-auto">
-                                    <Icon name="google" size={24} />
+                                
+                                {loginError && (
+                                    <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm text-left flex gap-3 items-start border border-red-100">
+                                        <Icon name="info" size={20} className="shrink-0 mt-0.5" />
+                                        <p>{loginError}</p>
+                                    </div>
+                                )}
+
+                                <button onClick={handleLogin} className="w-full bg-indigo-600 text-white px-6 py-4 rounded-2xl font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-3">
+                                    <Icon name="google" size={20} />
                                     เข้าสู่ระบบด้วย Google
                                 </button>
-                                <p className="text-xs text-slate-400 mt-4">แนะนำให้เปิดผ่านเบราว์เซอร์ Chrome หรือ Safari</p>
+                                <p className="text-[10px] text-slate-400 mt-4 uppercase tracking-widest font-bold">Secured by Firebase</p>
                             </div>
                         ) : (
                             <div className="no-print space-y-8">
@@ -289,82 +303,85 @@
                                 ) : sorted.map((obj, i) => {
                                     const info = getDiffInfo(obj.scores);
                                     return (
-                                        <div key={obj.id} className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 md:p-8 space-y-8 transition-all hover:border-indigo-100 hover:shadow-xl hover:shadow-indigo-50/50">
-                                            <div className="flex flex-col md:flex-row justify-between items-start gap-4 border-b border-slate-100 pb-6">
-                                                <div className="flex items-start gap-4 flex-grow w-full">
-                                                    <span className="font-black text-white bg-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-indigo-100">{i+1}</span>
+                                        <div key={obj.id} className="bg-white rounded-3xl shadow-sm border border-slate-200 p-4 md:p-8 space-y-6 md:space-y-8 transition-all hover:border-indigo-100">
+                                            <div className="flex flex-col md:flex-row justify-between items-start gap-4 border-b border-slate-100 pb-4 md:pb-6">
+                                                <div className="flex items-start gap-3 md:gap-4 flex-grow w-full">
+                                                    <span className="font-black text-white bg-indigo-600 w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0 shadow-sm mt-1">{i+1}</span>
                                                     <textarea 
-                                                        className="w-full font-extrabold text-2xl border-none focus:ring-0 text-slate-800 placeholder:text-slate-200 resize-none p-0 bg-transparent min-h-[40px] leading-tight"
+                                                        className="w-full font-extrabold text-xl md:text-2xl border-none focus:ring-0 text-slate-800 placeholder:text-slate-200 resize-none p-0 bg-transparent min-h-[35px] leading-tight"
                                                         rows={1} value={obj.name} onFocus={handleAutoResize} onInput={handleAutoResize}
                                                         onChange={e => performUpdate(obj.id, {name: e.target.value})} 
-                                                        placeholder="ระบุชื่อ Objective เช่น เพิ่มประสิทธิภาพการผลิต..."
+                                                        placeholder="ระบุชื่อ Objective..."
                                                     />
                                                 </div>
                                                 <div className="flex items-center gap-2 self-end md:self-start">
-                                                    <button onClick={() => db.collection(`artifacts/${appId}/users/${user.uid}/objectives`).doc(obj.id).delete()} className="text-slate-200 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-xl">
+                                                    <button onClick={() => db.collection(`artifacts/${appId}/users/${user.uid}/objectives`).doc(obj.id).delete()} className="text-slate-300 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-xl">
                                                         <Icon name="trash" size={20}/>
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-inner">
-                                                {criteria.map(c => (
-                                                    <div key={c.id} className="text-center space-y-3 flex flex-col items-center">
-                                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                            <Icon name={c.icon} size={14}/> {c.label}
-                                                        </label>
-                                                        <div className="h-8 flex items-center justify-center">
-                                                            <p className="text-[10px] text-slate-400 leading-tight italic px-2">{c.desc}</p>
+                                            {/* Difficulty Matrix (Scrollable on small mobile) */}
+                                            <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+                                                <div className="grid grid-cols-4 min-w-[500px] gap-2 md:gap-6 bg-slate-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-slate-100 shadow-inner">
+                                                    {criteria.map(c => (
+                                                        <div key={c.id} className="text-center space-y-2 md:space-y-3 flex flex-col items-center">
+                                                            <label className="text-[10px] md:text-[11px] font-black text-slate-400 uppercase tracking-widest flex flex-col items-center gap-1 md:flex-row md:gap-2">
+                                                                <Icon name={c.icon} size={14}/> <span>{c.label}</span>
+                                                            </label>
+                                                            <div className="h-8 flex items-center justify-center hidden md:flex">
+                                                                <p className="text-[9px] text-slate-400 leading-tight italic px-1">{c.desc}</p>
+                                                            </div>
+                                                            <div className="flex justify-center gap-1 md:gap-2 mt-1">
+                                                                {c.options.map(o => (
+                                                                    <button key={o.v} onClick={() => performUpdate(obj.id, { scores: {...obj.scores, [c.id]: o.v} })} className={`w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl text-xs md:text-sm font-black transition-all shadow-sm flex items-center justify-center border-2 ${obj.scores?.[c.id] === o.v ? 'bg-indigo-600 border-indigo-600 text-white scale-110 shadow-indigo-100' : 'bg-white border-slate-100 text-slate-300 hover:border-indigo-200'}`}>
+                                                                        {o.v}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                        <div className="flex justify-center gap-2 mt-1">
-                                                            {c.options.map(o => (
-                                                                <button key={o.v} onClick={() => performUpdate(obj.id, { scores: {...obj.scores, [c.id]: o.v} })} className={`w-10 h-10 rounded-2xl text-sm font-black transition-all shadow-sm flex items-center justify-center border-2 ${obj.scores?.[c.id] === o.v ? 'bg-indigo-600 border-indigo-600 text-white scale-110 shadow-indigo-100' : 'bg-white border-slate-100 text-slate-300 hover:border-indigo-200 hover:text-indigo-400'}`}>
-                                                                    {o.v}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                    ))}
+                                                </div>
                                             </div>
 
-                                            <div className="space-y-6">
-                                                <div className="flex justify-between items-center px-2">
-                                                    <h3 className="text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-3">
-                                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> Key Results & Metrics
+                                            <div className="space-y-4 md:space-y-6">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <h3 className="text-xs md:text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-2">
+                                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div> KRs
                                                     </h3>
                                                     <button onClick={() => {
                                                         const newKRs = [...(obj.keyResults || []), { id: Date.now(), name: '', metric: '', target: '', value: 0 }];
                                                         performUpdate(obj.id, { keyResults: newKRs });
-                                                    }} className="text-[11px] font-black text-indigo-600 bg-white border border-indigo-100 px-4 py-2 rounded-full hover:bg-indigo-50 transition-all shadow-sm">+ เพิ่มรายการผลลัพธ์</button>
+                                                    }} className="text-[10px] md:text-[11px] font-black text-indigo-600 bg-white border border-indigo-100 px-3 py-1.5 rounded-full hover:bg-indigo-50 shadow-sm">+ เพิ่ม KRs</button>
                                                 </div>
                                                 
-                                                <div className="grid grid-cols-1 gap-5">
+                                                <div className="grid grid-cols-1 gap-4 md:gap-5">
                                                     {(obj.keyResults || []).map(kr => (
-                                                        <div key={kr.id} className="bg-white border border-slate-100 rounded-3xl p-6 space-y-6 shadow-sm hover:shadow-md transition-all group">
-                                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-                                                                <div className="md:col-span-5 space-y-2">
-                                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ชื่อโครงการ / สิ่งที่ทำสำเร็จ</label>
-                                                                    <textarea className="w-full text-sm font-bold border-slate-100 rounded-2xl py-3 px-4 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm bg-slate-50/50 resize-none min-h-[50px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.name} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, name: e.target.value} : k) })} placeholder="ระบุรายละเอียดงาน..."/>
+                                                        <div key={kr.id} className="bg-white border border-slate-100 rounded-2xl md:rounded-3xl p-4 md:p-6 space-y-4 md:space-y-6 shadow-sm">
+                                                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                                                                <div className="lg:col-span-5 space-y-1 md:space-y-2">
+                                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">รายละเอียด KR</label>
+                                                                    <textarea className="w-full text-sm font-bold border-slate-100 rounded-xl md:rounded-2xl py-2 px-3 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 bg-slate-50/50 resize-none min-h-[40px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.name} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, name: e.target.value} : k) })} placeholder="ระบุสิ่งที่ทำ..."/>
                                                                 </div>
-                                                                <div className="md:col-span-3 space-y-2">
-                                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ตัวชี้วัด (Metric)</label>
-                                                                    <textarea className="w-full text-sm font-bold border-slate-100 rounded-2xl py-3 px-4 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm bg-slate-50/50 resize-none min-h-[50px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.metric} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, metric: e.target.value} : k) })} placeholder="เช่น % Yield..."/>
+                                                                <div className="lg:col-span-3 space-y-1 md:space-y-2">
+                                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">ตัวชี้วัด</label>
+                                                                    <textarea className="w-full text-sm font-bold border-slate-100 rounded-xl md:rounded-2xl py-2 px-3 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 bg-slate-50/50 resize-none min-h-[40px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.metric} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, metric: e.target.value} : k) })} placeholder="เช่น %..."/>
                                                                 </div>
-                                                                <div className="md:col-span-4 space-y-2">
-                                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">เป้าหมาย (Target)</label>
-                                                                    <div className="flex gap-3">
-                                                                        <textarea className="flex-grow text-sm font-bold border-slate-100 rounded-2xl py-3 px-4 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm bg-slate-50/50 resize-none min-h-[50px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.target} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, target: e.target.value} : k) })} placeholder="เช่น 95%..."/>
-                                                                        <button onClick={() => performUpdate(obj.id, { keyResults: obj.keyResults.filter(k => k.id !== kr.id) })} className="text-slate-200 hover:text-red-400 p-2 self-start"><Icon name="trash" size={18}/></button>
+                                                                <div className="lg:col-span-4 space-y-1 md:space-y-2">
+                                                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">เป้าหมาย</label>
+                                                                    <div className="flex gap-2">
+                                                                        <textarea className="flex-grow text-sm font-bold border-slate-100 rounded-xl md:rounded-2xl py-2 px-3 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 bg-slate-50/50 resize-none min-h-[40px] overflow-hidden" rows={1} onInput={handleAutoResize} onFocus={handleAutoResize} value={kr.target} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, target: e.target.value} : k) })} placeholder="เช่น 95%..."/>
+                                                                        <button onClick={() => performUpdate(obj.id, { keyResults: obj.keyResults.filter(k => k.id !== kr.id) })} className="text-slate-300 hover:text-red-400 p-2 shrink-0 self-start"><Icon name="trash" size={18}/></button>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center gap-6 bg-slate-900/5 p-4 rounded-2xl border border-dashed border-slate-200">
+                                                            <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200">
                                                                 <div className="flex-grow">
                                                                     <input type="range" className="w-full accent-indigo-600 cursor-pointer" value={kr.value} onChange={e => performUpdate(obj.id, { keyResults: obj.keyResults.map(k => k.id === kr.id ? {...k, value: parseInt(e.target.value) || 0} : k) })}/>
                                                                 </div>
-                                                                <div className="flex flex-col items-end min-w-[70px]">
-                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ความสำเร็จ</span>
-                                                                    <span className="font-black text-indigo-600 text-2xl leading-none">{kr.value}%</span>
+                                                                <div className="flex flex-col items-end min-w-[50px]">
+                                                                    <span className="text-[8px] font-black text-slate-400 uppercase">Actual</span>
+                                                                    <span className="font-black text-indigo-600 text-xl leading-none">{kr.value}%</span>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -372,18 +389,18 @@
                                                 </div>
                                             </div>
 
-                                            <div className="pt-8 border-t border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-6">
-                                                <div className="flex flex-wrap gap-3">
-                                                    <span className={`text-[11px] font-black px-4 py-2 rounded-full border shadow-sm ${info.bg} ${info.color} uppercase tracking-wider`}>Difficulty: {info.level}</span>
-                                                    <span className="text-[11px] font-black px-4 py-2 rounded-full border bg-white text-slate-400 shadow-sm uppercase tracking-wider italic">Threshold: {info.threshold}%</span>
+                                            <div className="pt-6 md:pt-8 border-t border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 md:gap-6">
+                                                <div className="flex flex-wrap justify-center gap-2">
+                                                    <span className={`text-[10px] md:text-[11px] font-black px-3 py-1.5 rounded-full border shadow-sm ${info.bg} ${info.color} uppercase tracking-wider`}>Difficulty: {info.level}</span>
+                                                    <span className="text-[10px] md:text-[11px] font-black px-3 py-1.5 rounded-full border bg-white text-slate-400 shadow-sm uppercase tracking-wider italic">Threshold: {info.threshold}%</span>
                                                 </div>
-                                                <div className="bg-slate-900 text-white pl-8 pr-4 py-3 rounded-2xl flex items-center gap-6 shadow-2xl border border-slate-700">
+                                                <div className="w-full sm:w-auto bg-slate-900 text-white pl-6 pr-3 py-2 md:py-3 rounded-2xl flex justify-between items-center gap-6 shadow-xl">
                                                     <div className="text-right">
-                                                        <div className="text-[9px] font-black text-indigo-400 uppercase tracking-[.2em] mb-1">Normalized Score</div>
-                                                        <div className="text-4xl font-black leading-none">{calculateScore(obj)}<span className="text-base font-bold opacity-40 ml-1">%</span></div>
+                                                        <div className="text-[8px] font-black text-indigo-400 uppercase tracking-[.2em] mb-1">Score</div>
+                                                        <div className="text-3xl md:text-4xl font-black leading-none">{calculateScore(obj)}<span className="text-sm font-bold opacity-40 ml-1">%</span></div>
                                                     </div>
-                                                    <div className="p-4 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-500/20">
-                                                        <Icon name="award" className="text-white" size={28}/>
+                                                    <div className="p-3 bg-indigo-600 rounded-xl shadow-lg">
+                                                        <Icon name="award" className="text-white" size={24}/>
                                                     </div>
                                                 </div>
                                             </div>
@@ -393,15 +410,15 @@
                             </div>
                         )}
 
-                        {/* Print Only Area */}
+                        {/* Print Only Area (สำหรับหน้ากระดาษ A4) */}
                         {user && sorted.length > 0 && (
                             <div className="print-only space-y-12">
                                 <div className="header border-b-4 border-slate-900 pb-6 flex justify-between items-end">
                                     <div>
-                                        <h1 className="text-5xl font-black uppercase tracking-tighter text-slate-900 leading-none mb-2">Performance Summary</h1>
-                                        <p className="text-lg font-bold text-slate-500">รายงานสรุปผลสัมฤทธิ์ OKR และระดับความยากรายบุคคล</p>
+                                        <h1 className="text-4xl font-black uppercase tracking-tighter text-slate-900 leading-none mb-2">Performance Summary</h1>
+                                        <p className="text-sm font-bold text-slate-500">รายงานสรุปผลสัมฤทธิ์ OKR และระดับความยากรายบุคคล</p>
                                     </div>
-                                    <div className="text-right text-[11px] font-black text-slate-400 uppercase leading-relaxed tracking-widest">
+                                    <div className="text-right text-[10px] font-black text-slate-400 uppercase leading-relaxed tracking-widest">
                                         <p>Employee: {user.displayName}</p>
                                         <p>Email: {user.email}</p>
                                         <p>Date: {new Date().toLocaleDateString('th-TH')}</p>
@@ -411,29 +428,29 @@
                                 {sorted.map((obj, i) => {
                                     const info = getDiffInfo(obj.scores);
                                     return (
-                                        <div key={obj.id} className="space-y-4" style={{ pageBreakInside: 'avoid' }}>
-                                            <div className="bg-slate-100 p-5 font-black text-xl border-x border-t border-slate-900 flex justify-between items-center text-slate-900">
+                                        <div key={obj.id} className="space-y-3" style={{ pageBreakInside: 'avoid' }}>
+                                            <div className="bg-slate-100 p-4 font-black text-lg border-x border-t border-slate-900 flex justify-between items-center text-slate-900">
                                                 <span className="uppercase">{i+1}. {obj.name || "Untitled Objective"}</span>
-                                                <span className="text-xs tracking-widest opacity-60">LEVEL: {info.level} ({info.threshold}% THRESHOLD)</span>
+                                                <span className="text-[10px] tracking-widest opacity-60">LEVEL: {info.level} ({info.threshold}%)</span>
                                             </div>
                                             <table className="w-full border-collapse">
                                                 <thead>
                                                     <tr>
-                                                        <th className="border-2 border-slate-900 p-3 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-left">Key Result / Action Plan</th>
-                                                        <th className="border-2 border-slate-900 p-3 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-left">Metric</th>
-                                                        <th className="border-2 border-slate-900 p-3 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-left">Target</th>
-                                                        <th className="border-2 border-slate-900 p-3 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-center">Achievement</th>
-                                                        <th className="border-2 border-slate-900 p-3 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-center">Score</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[9px] font-black uppercase tracking-widest text-left">Key Result / Action Plan</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[9px] font-black uppercase tracking-widest text-left">Metric</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[9px] font-black uppercase tracking-widest text-left">Target</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[9px] font-black uppercase tracking-widest text-center">Achieve</th>
+                                                        <th className="border-2 border-slate-900 p-2 bg-slate-50 text-[9px] font-black uppercase tracking-widest text-center">Score</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {obj.keyResults?.map((kr, idx) => (
                                                         <tr key={kr.id}>
-                                                            <td className="border-2 border-slate-900 p-3 text-sm font-bold wrap-text leading-snug">{kr.name}</td>
-                                                            <td className="border-2 border-slate-900 p-3 text-sm wrap-text leading-snug">{kr.metric}</td>
-                                                            <td className="border-2 border-slate-900 p-3 text-sm wrap-text leading-snug">{kr.target}</td>
-                                                            <td className="border-2 border-slate-900 p-3 text-sm text-center font-black text-indigo-600">{kr.value}%</td>
-                                                            {idx === 0 && <td rowSpan={obj.keyResults.length} className="border-2 border-slate-900 p-4 text-center font-black text-3xl bg-slate-100 text-slate-900">{calculateScore(obj)}%</td>}
+                                                            <td className="border-2 border-slate-900 p-2 text-xs font-bold wrap-text leading-snug">{kr.name}</td>
+                                                            <td className="border-2 border-slate-900 p-2 text-xs wrap-text leading-snug">{kr.metric}</td>
+                                                            <td className="border-2 border-slate-900 p-2 text-xs wrap-text leading-snug">{kr.target}</td>
+                                                            <td className="border-2 border-slate-900 p-2 text-xs text-center font-black text-indigo-600">{kr.value}%</td>
+                                                            {idx === 0 && <td rowSpan={obj.keyResults.length} className="border-2 border-slate-900 p-2 text-center font-black text-2xl bg-slate-100 text-slate-900">{calculateScore(obj)}%</td>}
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -442,16 +459,16 @@
                                     );
                                 })}
                                 
-                                <div className="mt-24 grid grid-cols-2 gap-32 px-12 pb-20">
+                                <div className="mt-16 grid grid-cols-2 gap-20 px-10 pb-10">
                                     <div className="text-center">
-                                        <div className="h-20 border-b-2 border-slate-900"></div>
-                                        <p className="mt-4 font-black uppercase text-xs tracking-widest text-slate-900">Employee Signature</p>
-                                        <p className="text-[9px] text-slate-400 mt-1 italic">Signed as: {user.displayName}</p>
+                                        <div className="h-16 border-b-2 border-slate-900"></div>
+                                        <p className="mt-3 font-black uppercase text-[10px] tracking-widest text-slate-900">Employee Signature</p>
+                                        <p className="text-[8px] text-slate-400 mt-1 italic">Signed as: {user.displayName}</p>
                                     </div>
                                     <div className="text-center">
-                                        <div className="h-20 border-b-2 border-slate-900"></div>
-                                        <p className="mt-4 font-black uppercase text-xs tracking-widest text-slate-900">Manager / Evaluator</p>
-                                        <p className="text-[9px] text-slate-400 mt-1 italic">Date: ____ / ____ / ____</p>
+                                        <div className="h-16 border-b-2 border-slate-900"></div>
+                                        <p className="mt-3 font-black uppercase text-[10px] tracking-widest text-slate-900">Manager / Evaluator</p>
+                                        <p className="text-[8px] text-slate-400 mt-1 italic">Date: ____ / ____ / ____</p>
                                     </div>
                                 </div>
                             </div>
@@ -466,5 +483,3 @@
     </script>
 </body>
 </html>
-
-
